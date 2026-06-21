@@ -59,7 +59,7 @@ export class Voice extends plugin {
       event: "message",
       priority: 10,
       rule: [
-        { reg: ".+说.+", fnc: "Voice", log: false },
+        { reg: "^[^说]+说.+", fnc: "Voice", log: false },
         { reg: "#?语音(合成)?(角色)?列表$", fnc: "VoiceList" },
       ],
     })
@@ -96,9 +96,9 @@ export class Voice extends plugin {
     } catch (err) {
       logger.error(`[语音合成] 失败：${logger.red(err.message)}`)
       await this.reply(`语音合成失败：${err.message}`, true)
+    } finally {
+      Running = false
     }
-
-    Running = false
   }
 
   async VoiceList() {
