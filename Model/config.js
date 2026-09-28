@@ -13,7 +13,7 @@ const config = {
 
   RealESRGAN: {
     api: "",
-    format: "jpg",
+    format: "png",
   },
 
   RemBG: {

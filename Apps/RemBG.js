@@ -1,10 +1,13 @@
 import config from "../Model/config.js"
+import fs from "node:fs/promises"
 
 const path = `plugins/TRSS-Plugin/RemBG/`
 const errorTips =
   "请查看安装使用教程：\nhttps://git.trss.me/TRSS-Plugin\n并将报错通过联系方式反馈给开发者"
 let model
 let Running
+const maxInputSize = 8 * 1024 * 1024
+const maxInputDimension = 1800
 
 export class RemBG extends plugin {
   constructor() {
@@ -28,10 +31,10 @@ export class RemBG extends plugin {
       return false
     }
 
-    if (this.e.msg.match("动漫")) {
-      model = "anime.sh"
-    } else {
+    if (this.e.msg.match(/普通|真人|通用|u2net/i)) {
       model = "main.sh i"
+    } else {
+      model = "anime.sh"
     }
 
     let reply
@@ -84,17 +87,43 @@ export class RemBG extends plugin {
       }
 
       logger.mark(`[图片背景去除] 图片保存成功：${logger.blue(this.e.img[0])}`)
+      ret = await Bot.exec(`command -v convert >/dev/null 2>&1 && convert '${path}input.png' -auto-orient -resize '${maxInputDimension}x${maxInputDimension}>' '${path}input.tmp.png' && mv '${path}input.tmp.png' '${path}input.png' || true`)
+      if (ret.error)
+        logger.warn(`[图片背景去除] 图片压缩跳过：${ret.error}`)
 
+      try {
+        const stat = await Bot.fsStat(`${path}input.png`)
+        if (stat?.size > maxInputSize) {
+          await this.reply(`图片过大（${(stat.size / 1024 / 1024).toFixed(1)}MB），为避免内存爆掉，请换一张小于 8MB 的图`, true)
+          Running = false
+          return true
+        }
+      } catch {}
+
+      await fs.rm(`${path}output.png`, { force: true })
       const cmd = `bash '${path}'${model} input.png output.png`
       ret = await Bot.exec(cmd)
 
       if (ret.error) {
         logger.error(`图片背景去除错误：${logger.red(ret.error)}`)
-        await this.reply(`图片背景去除错误：${ret.error}`, true)
-        await this.reply(errorTips)
+        await this.reply(`图片背景去除失败：${String(ret.error).split("\n").slice(-6).join("\n")}`, true)
+        Running = false
+        return true
+      }
+      try {
+        const outStat = await Bot.fsStat(`${path}output.png`)
+        if (!outStat?.size) {
+          await this.reply("图片背景去除失败：没有生成有效图片", true)
+          Running = false
+          return true
+        }
+      } catch {
+        await this.reply("图片背景去除失败：输出文件不存在", true)
+        Running = false
+        return true
       }
 
-      url = `file://${path}output.png`
+      url = `file://${process.cwd()}/${path}output.png`
     }
 
     logger.mark(`[图片背景去除] 发送图片：${logger.blue(url)}`)

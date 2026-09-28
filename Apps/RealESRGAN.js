@@ -1,4 +1,5 @@
 import config from "../Model/config.js"
+import fs from "node:fs/promises"
 
 const path = `plugins/TRSS-Plugin/Real-ESRGAN/`
 const errorTips =
@@ -15,7 +16,7 @@ export class RealESRGAN extends plugin {
       priority: 10,
       rule: [
         {
-          reg: "^#?(动漫)?图片修复$",
+          reg: "^#?(动漫|普通|真人|通用)?图片修复$",
           fnc: "DetectImage",
         },
       ],
@@ -28,10 +29,10 @@ export class RealESRGAN extends plugin {
       return false
     }
 
-    if (this.e.msg.match("动漫")) {
-      model = "RealESRGAN_x4plus_anime_6B"
-    } else {
+    if (this.e.msg.match(/普通|真人|通用/i)) {
       model = "RealESRGAN_x4plus"
+    } else {
+      model = "RealESRGAN_x4plus_anime_6B"
     }
 
     let reply
@@ -85,16 +86,37 @@ export class RealESRGAN extends plugin {
 
       logger.mark(`[图片修复] 图片保存成功：${logger.blue(this.e.img[0])}`)
 
-      const cmd = `poetry run python inference_realesrgan.py --fp32 --tile 100 -n ${model} -i input.${config.RealESRGAN.format}`
-      ret = await Bot.exec(cmd, { cwd: path })
+      await fs.rm(`${path}results/input_out.${config.RealESRGAN.format}`, { force: true })
+      await fs.rm(`${path}realesrgan.log`, { force: true })
+
+      const cmd = `bash main.sh --fp32 --tile 50 -n ${model} -i input.${config.RealESRGAN.format} > realesrgan.log 2>&1`
+      ret = await Bot.exec(cmd, { cwd: path, timeout: 15 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 })
 
       if (ret.error) {
         logger.error(`图片修复错误：${logger.red(ret.error)}`)
-        await this.reply(`图片修复错误：${ret.error}`, true)
-        await this.reply(errorTips)
+        let log = ""
+        try {
+          log = await fs.readFile(`${path}realesrgan.log`, "utf-8")
+        } catch (_) {}
+        await this.reply(`图片修复错误：${String(log || ret.error).split("\n").slice(-8).join("\n")}`, true)
+        Running = false
+        return true
       }
 
-      url = `file://${path}results/input_out.${config.RealESRGAN.format}`
+      try {
+        const stat = await Bot.fsStat(`${path}results/input_out.${config.RealESRGAN.format}`)
+        if (!stat?.size) {
+          await this.reply("图片修复错误：没有生成有效图片，可能图片太大或进程被系统杀掉", true)
+          Running = false
+          return true
+        }
+      } catch (_) {
+        await this.reply("图片修复错误：输出文件不存在，可能图片太大或进程被系统杀掉", true)
+        Running = false
+        return true
+      }
+
+      url = `file://${process.cwd()}/${path}results/input_out.${config.RealESRGAN.format}`
     }
 
     logger.mark(`[图片修复] 发送图片：${logger.blue(url)}`)
