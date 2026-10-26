@@ -28,7 +28,7 @@ if (process.platform == "win32") {
   )
   langCmd = "powershell"
 } else if (process.env.SHELL?.endsWith("/bash"))
-  prompt = cmd => [`"$0" -ic 'echo "\${PS1@P}"';${cmd}`, { shell: process.env.SHELL }]
+  prompt = cmd => [`"$0" -c 'echo "\${PS1@P}"';${cmd}`, { shell: process.env.SHELL }]
 
 export class RemoteCommand extends plugin {
   constructor() {
@@ -137,7 +137,9 @@ export class RemoteCommand extends plugin {
     if (ret.error) msgs.push("远程命令错误：" + ret.error.stack)
     if (ret.stderr) msgs.push("标准错误输出：" + String.fromCharCode(10) + ret.stderr)
     if (!msgs.length) return this.reply("命令执行完成，没有返回值", true)
-    return this.reply(await common.makeForwardMsg(this.e, msgs))
+  const plain = msgs.join(String.fromCharCode(10)).trim()
+  if (plain.length <= 600) return this.reply(plain)
+  return this.reply(await common.makeForwardMsg(this.e, msgs))
   }
 
   async ShellPic() {
