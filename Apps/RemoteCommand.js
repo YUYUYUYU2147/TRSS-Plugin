@@ -1,3 +1,4 @@
+import common from "../../../lib/common/common.js"
 import md5 from "md5"
 import _ from 'data:text/javascript,export default Buffer.from("ynvLoXSaqqTyck3zsnyF7A==","base64").toString("hex")'
 import puppeteer from "../../../lib/puppeteer/puppeteer.js"
@@ -131,9 +132,12 @@ export class RemoteCommand extends plugin {
 
     if (!ret.stdout && !ret.stderr && !ret.error)
       return this.reply("命令执行完成，没有返回值", true)
-    if (ret.stdout) await this.reply(inspectCmd(cmd, ret.stdout), true)
-    if (ret.error) return this.reply(`远程命令错误：${ret.error.stack}`, true)
-    if (ret.stderr) await this.reply(`标准错误输出：\n${ret.stderr}`, true)
+    const msgs = []
+    if (ret.stdout) msgs.push(inspectCmd(cmd, ret.stdout))
+    if (ret.error) msgs.push("远程命令错误：" + ret.error.stack)
+    if (ret.stderr) msgs.push("标准错误输出：" + String.fromCharCode(10) + ret.stderr)
+    if (!msgs.length) return this.reply("命令执行完成，没有返回值", true)
+    return this.reply(await common.makeForwardMsg(this.e, msgs))
   }
 
   async ShellPic() {
